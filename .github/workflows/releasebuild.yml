@@ -1,0 +1,48 @@
+name: Build Release
+
+# on: 
+#   release:
+#     types: [published]
+#   push:
+#     branches: 
+#       - master
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag: 
+        description: "The tag version you want to build"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Set version
+      run: |
+        if [[ -z "${{ github.event.inputs.tag }}" ]]; then
+          echo "VYOS_VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
+        else 
+          echo "VYOS_VERSION=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
+        fi
+
+    - name: Pull vyos-build docker image
+      run: |
+        docker pull vyos/vyos-build:sagitta
+        
+    - name: Build iso
+      run: |
+        git clone -b sagitta --single-branch https://github.com/vyos/vyos-build
+        cd vyos-build
+        docker run --rm --privileged -v $(pwd):/vyos -w /vyos vyos/vyos-build:sagitta bash -c 'sudo ./build-vyos-image iso --architecture amd64 --build-type release --version "${{ env.VYOS_VERSION }}"'
+
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: vyos-build/build/vyos-${{ env.VYOS_VERSION }}-amd64.iso
+        tag: vyos-sagitta-${{ env.VYOS_VERSION }}
+        overwrite: true
+        file_glob: true
