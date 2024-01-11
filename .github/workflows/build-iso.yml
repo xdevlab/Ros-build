@@ -1,0 +1,43 @@
+name: Build VyOS LTS
+
+# on: 
+#   release:
+#     types: [published]
+#   push:
+#     branches: 
+#       - master
+# on:
+#   push:
+#     tags:
+#       - 'v*'
+on:
+  workflow_dispatch  
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Set VyOS version
+      run: |
+          echo "VYOS_VERSION=sagitta-1.4-$(date -u +%Y%m%d%H%M)" >> $GITHUB_ENV
+
+    - name: Pull vyos-build docker image
+      run: |
+        docker pull vyos/vyos-build:sagitta
+        
+    - name: Build iso
+      run: |
+        git clone -b sagitta --single-branch https://github.com/vyos/vyos-build
+        cd vyos-build
+        docker run --rm --privileged -v $(pwd):/vyos -w /vyos vyos/vyos-build:sagitta bash -c 'sudo ./build-vyos-image iso --architecture amd64 --build-type release --version "${{ env.VYOS_VERSION }}"'
+
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN  }}
+        file: vyos-build/build/vyos-${{ env.VYOS_VERSION }}-amd64.iso
+        tag: vyos-${{ env.VYOS_VERSION }}
+        overwrite: true
+        file_glob: true
